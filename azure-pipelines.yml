@@ -1,0 +1,253 @@
+# Azure DevOps Pipeline for ALCIS
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    exclude:
+      - README.md
+      - docs/*
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+variables:
+  pythonVersion: '3.11'
+  vmImageName: 'ubuntu-latest'
+
+stages:
+- stage: Security
+  displayName: 'Security Scanning'
+  jobs:
+  - job: SecurityScan
+    displayName: 'Security Analysis'
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Use Python $(pythonVersion)'
+    
+    - script: |
+        python -m pip install --upgrade pip
+        pip install bandit safety semgrep
+      displayName: 'Install security tools'
+    
+    - script: |
+        bandit -r src/ -f json -o $(Agent.TempDirectory)/bandit-report.json
+      displayName: 'Run Bandit security scan'
+      continueOnError: true
+    
+    - script: |
+        safety check --json --output $(Agent.TempDirectory)/safety-report.json
+      displayName: 'Run Safety vulnerability check'
+      continueOnError: true
+    
+    - task: PublishTestResults@2
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: '$(Agent.TempDirectory)/bandit-report.json'
+        testRunTitle: 'Security Scan Results'
+      condition: always()
+
+- stage: Quality
+  displayName: 'Code Quality'
+  dependsOn: Security
+  jobs:
+  - job: CodeQuality
+    displayName: 'Linting and Type Checking'
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Use Python $(pythonVersion)'
+    
+    - script: |
+        python -m pip install --upgrade pip
+        pip install black flake8 mypy isort
+        pip install -r requirements.txt
+      displayName: 'Install dependencies'
+    
+    - script: |
+        black --check --diff src/ tests/
+      displayName: 'Check code formatting'
+    
+    - script: |
+        isort --check-only --diff src/ tests/
+      displayName: 'Check import sorting'
+    
+    - script: |
+        flake8 src/ tests/ --max-line-length=88 --extend-ignore=E203,W503
+      displayName: 'Lint with flake8'
+    
+    - script: |
+        mypy src/ --ignore-missing-imports
+      displayName: 'Type checking with mypy'
+
+- stage: Test
+  displayName: 'Testing'
+  dependsOn: Quality
+  jobs:
+  - job: UnitTests
+    displayName: 'Unit Tests'
+    pool:
+      vmImage: $(vmImageName)
+    services:
+      postgres: postgres:15
+      redis: redis:7
+    variables:
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/alcis_test'
+      REDIS_URL: 'redis://localhost:6379/1'
+      SECRET_KEY: 'test-secret-key'
+      ENCRYPTION_KEY: 'dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcw=='
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Use Python $(pythonVersion)'
+    
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        playwright install chromium
+      displayName: 'Install dependencies'
+    
+    - script: |
+        pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=html --junitxml=test-results.xml
+      displayName: 'Run unit tests'
+    
+    - task: PublishTestResults@2
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: 'test-results.xml'
+        testRunTitle: 'Unit Test Results'
+      condition: always()
+    
+    - task: PublishCodeCoverageResults@1
+      inputs:
+        codeCoverageTool: 'Cobertura'
+        summaryFileLocation: 'coverage.xml'
+        reportDirectory: 'htmlcov'
+      condition: always()
+
+  - job: IntegrationTests
+    displayName: 'Integration Tests'
+    pool:
+      vmImage: $(vmImageName)
+    services:
+      postgres: postgres:15
+      redis: redis:7
+    variables:
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/alcis_test'
+      REDIS_URL: 'redis://localhost:6379/1'
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Use Python $(pythonVersion)'
+    
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        playwright install chromium
+      displayName: 'Install dependencies'
+    
+    - script: |
+        pytest tests/integration/ -v --maxfail=5 --junitxml=integration-results.xml
+      displayName: 'Run integration tests'
+    
+    - task: PublishTestResults@2
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: 'integration-results.xml'
+        testRunTitle: 'Integration Test Results'
+      condition: always()
+
+- stage: Build
+  displayName: 'Build and Package'
+  dependsOn: Test
+  jobs:
+  - job: BuildPackage
+    displayName: 'Build Python Package'
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Use Python $(pythonVersion)'
+    
+    - script: |
+        python -m pip install --upgrade pip
+        pip install build twine
+      displayName: 'Install build tools'
+    
+    - script: |
+        python -m build
+      displayName: 'Build package'
+    
+    - script: |
+        twine check dist/*
+      displayName: 'Check package'
+    
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: 'dist'
+        artifactName: 'python-package'
+      displayName: 'Publish package artifacts'
+
+  - job: BuildDocker
+    displayName: 'Build Docker Image'
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: Docker@2
+      displayName: 'Build Docker image'
+      inputs:
+        command: 'build'
+        dockerfile: 'Dockerfile'
+        tags: |
+          $(Build.BuildId)
+          latest
+    
+    - task: Docker@2
+      displayName: 'Push Docker image'
+      inputs:
+        command: 'push'
+        containerRegistry: 'DockerHub'
+        repository: 'alcis/alcis'
+        tags: |
+          $(Build.BuildId)
+          latest
+      condition: and(succeeded(), in(variables['Build.SourceBranch'], 'refs/heads/main', 'refs/heads/develop'))
+
+- stage: Deploy
+  displayName: 'Deploy'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployToProduction
+    displayName: 'Deploy to Production'
+    pool:
+      vmImage: $(vmImageName)
+    environment: 'production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - script: |
+              echo "Deploying ALCIS to production..."
+              # Add your deployment commands here
+            displayName: 'Deploy application'
+          
+          - script: |
+              echo "Running health checks..."
+              # Add health check commands here
+            displayName: 'Health checks'
