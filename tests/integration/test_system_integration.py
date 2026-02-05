@@ -174,7 +174,7 @@ class TestModuleStructure:
         
         # Find all directories in src
         for item in src_dir.rglob("*"):
-            if item.is_dir() and not item.name.startswith('.'):
+            if item.is_dir() and not item.name.startswith('.') and item.name != '__pycache__':
                 init_file = item / "__init__.py"
                 assert init_file.exists(), f"Missing __init__.py in {item.relative_to(project_root)}"
     

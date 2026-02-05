@@ -230,13 +230,7 @@ def handle_exception(
         return exception
     
     # Convert common exceptions
-    if isinstance(exception, (ConnectionRefusedError, OSError)):
-        alcis_exception = ConnectionError(
-            f"Connection failed: {str(exception)}",
-            error_code="CONNECTION_FAILED",
-            details={"original_exception": str(exception), **context}
-        )
-    elif isinstance(exception, PermissionError):
+    if isinstance(exception, PermissionError):
         alcis_exception = UnauthorizedAccessError(
             f"Permission denied: {str(exception)}",
             error_code="PERMISSION_DENIED",
@@ -246,6 +240,12 @@ def handle_exception(
         alcis_exception = ALCISException(
             f"Operation timed out: {str(exception)}",
             error_code="TIMEOUT",
+            details={"original_exception": str(exception), **context}
+        )
+    elif isinstance(exception, (ConnectionRefusedError, OSError)):
+        alcis_exception = ConnectionError(
+            f"Connection failed: {str(exception)}",
+            error_code="CONNECTION_FAILED",
             details={"original_exception": str(exception), **context}
         )
     else:

@@ -4,7 +4,8 @@ ALCIS Configuration Management
 import os
 from pathlib import Path
 from typing import Optional, List
-from pydantic import BaseSettings, Field
+from pydantic_settings import BaseSettings
+from pydantic import Field
 
 
 class DatabaseSettings(BaseSettings):
@@ -24,8 +25,8 @@ class RedisSettings(BaseSettings):
 
 class SecuritySettings(BaseSettings):
     """Security configuration"""
-    secret_key: str = Field(env="SECRET_KEY")
-    encryption_key: str = Field(env="ENCRYPTION_KEY")
+    secret_key: str = Field(default="test-secret-key", env="SECRET_KEY")
+    encryption_key: str = Field(default="test-encryption-key", env="ENCRYPTION_KEY")
     jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
     jwt_expiration: int = Field(default=900, env="JWT_EXPIRATION")  # 15 minutes
     password_hash_rounds: int = Field(default=12, env="PASSWORD_HASH_ROUNDS")

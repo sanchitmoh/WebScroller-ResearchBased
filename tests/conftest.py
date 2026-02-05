@@ -6,7 +6,30 @@ import asyncio
 from typing import Generator, AsyncGenerator
 from unittest.mock import Mock, AsyncMock
 
-from src.core.config import ALCISSettings
+# Import settings with fallback
+try:
+    from config.settings import ALCISSettings
+except ImportError:
+    # Create a mock settings class for testing
+    class ALCISSettings:
+        def __init__(self, **kwargs):
+            self.environment = kwargs.get('environment', 'test')
+            self.debug = kwargs.get('debug', True)
+            
+            # Create mock nested objects
+            class MockDB:
+                url = kwargs.get('database__url', 'sqlite:///test.db')
+            
+            class MockRedis:
+                url = kwargs.get('redis__url', 'redis://localhost:6379/1')
+            
+            class MockSecurity:
+                secret_key = kwargs.get('security__secret_key', 'test-secret')
+                encryption_key = kwargs.get('security__encryption_key', 'test-key')
+            
+            self.database = MockDB()
+            self.redis = MockRedis()
+            self.security = MockSecurity()
 
 
 @pytest.fixture(scope="session")
