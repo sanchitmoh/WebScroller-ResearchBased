@@ -7,7 +7,22 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
 
-from config.settings import ALCISSettings, settings
+# Import settings directly to avoid circular imports
+try:
+    from config.settings import ALCISSettings
+    settings = ALCISSettings()
+except ImportError:
+    # Fallback for testing
+    from dataclasses import dataclass
+    
+    @dataclass
+    class MockSettings:
+        project_root: Path = Path(__file__).parent.parent.parent
+        data_dir: Path = Path(__file__).parent.parent.parent / "data"
+        logs_dir: Path = Path(__file__).parent.parent.parent / "logs"
+        debug: bool = True
+    
+    settings = MockSettings()
 
 
 @dataclass
@@ -15,7 +30,7 @@ class ConfigManager:
     """
     Central configuration management for ALCIS system
     """
-    settings: ALCISSettings = field(default_factory=lambda: settings)
+    settings: Any = field(default_factory=lambda: settings)
     _platform_configs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     _policy_configs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     
