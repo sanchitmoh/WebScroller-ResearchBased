@@ -4,66 +4,84 @@ ALCIS Configuration Management
 import os
 from pathlib import Path
 from typing import Optional, List
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
 
 class DatabaseSettings(BaseSettings):
     """Database configuration"""
-    url: str = Field(default="postgresql://alcis:alcis@localhost/alcis", env="DATABASE_URL")
-    echo: bool = Field(default=False, env="DATABASE_ECHO")
-    pool_size: int = Field(default=10, env="DATABASE_POOL_SIZE")
-    max_overflow: int = Field(default=20, env="DATABASE_MAX_OVERFLOW")
+    model_config = SettingsConfigDict(env_prefix="DATABASE_")
+    
+    url: str = "postgresql://alcis:alcis@localhost/alcis"
+    echo: bool = False
+    pool_size: int = 10
+    max_overflow: int = 20
 
 
 class RedisSettings(BaseSettings):
     """Redis configuration"""
-    url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
-    password: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
-    db: int = Field(default=0, env="REDIS_DB")
+    model_config = SettingsConfigDict(env_prefix="REDIS_")
+    
+    url: str = "redis://localhost:6379/0"
+    password: Optional[str] = None
+    db: int = 0
 
 
 class SecuritySettings(BaseSettings):
     """Security configuration"""
-    secret_key: str = Field(default="test-secret-key", env="SECRET_KEY")
-    encryption_key: str = Field(default="test-encryption-key", env="ENCRYPTION_KEY")
-    jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
-    jwt_expiration: int = Field(default=900, env="JWT_EXPIRATION")  # 15 minutes
-    password_hash_rounds: int = Field(default=12, env="PASSWORD_HASH_ROUNDS")
+    model_config = SettingsConfigDict(env_prefix="SECURITY_")
+    
+    secret_key: str = "test-secret-key"
+    encryption_key: str = "test-encryption-key"
+    jwt_algorithm: str = "HS256"
+    jwt_expiration: int = 900  # 15 minutes
+    password_hash_rounds: int = 12
 
 
 class CrawlerSettings(BaseSettings):
     """Web crawler configuration"""
-    user_agents: List[str] = Field(default=[
+    model_config = SettingsConfigDict(env_prefix="CRAWLER_")
+    
+    user_agents: List[str] = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ])
-    default_timeout: int = Field(default=30, env="CRAWLER_TIMEOUT")
-    max_retries: int = Field(default=3, env="CRAWLER_MAX_RETRIES")
-    rate_limit: float = Field(default=1.0, env="CRAWLER_RATE_LIMIT")  # seconds between requests
+    ]
+    default_timeout: int = 30
+    max_retries: int = 3
+    rate_limit: float = 1.0  # seconds between requests
 
 
 class AISettings(BaseSettings):
     """AI and ML configuration"""
-    model_name: str = Field(default="distilbert-base-uncased", env="AI_MODEL_NAME")
-    confidence_threshold: float = Field(default=0.7, env="AI_CONFIDENCE_THRESHOLD")
-    max_reasoning_steps: int = Field(default=10, env="AI_MAX_REASONING_STEPS")
+    model_config = SettingsConfigDict(env_prefix="AI_")
+    
+    model_name: str = "distilbert-base-uncased"
+    confidence_threshold: float = 0.7
+    max_reasoning_steps: int = 10
 
 
 class LoggingSettings(BaseSettings):
     """Logging configuration"""
-    level: str = Field(default="INFO", env="LOG_LEVEL")
-    format: str = Field(default="%(asctime)s - %(name)s - %(levelname)s - %(message)s", env="LOG_FORMAT")
-    file_path: Optional[str] = Field(default=None, env="LOG_FILE_PATH")
+    model_config = SettingsConfigDict(env_prefix="LOG_")
+    
+    level: str = "INFO"
+    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    file_path: Optional[str] = None
 
 
 class ALCISSettings(BaseSettings):
     """Main ALCIS configuration"""
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore"  # This will ignore extra environment variables
+    )
     
     # Environment
-    environment: str = Field(default="development", env="ENVIRONMENT")
-    debug: bool = Field(default=True, env="DEBUG")
+    environment: str = "development"
+    debug: bool = True
     
     # Project paths
     project_root: Path = Field(default_factory=lambda: Path(__file__).parent.parent)
@@ -77,11 +95,6 @@ class ALCISSettings(BaseSettings):
     crawler: CrawlerSettings = Field(default_factory=CrawlerSettings)
     ai: AISettings = Field(default_factory=AISettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
 
 
 # Global settings instance
